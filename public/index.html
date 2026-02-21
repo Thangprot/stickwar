@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Stick War Donate - Hướng dẫn donate</title>
+  <style>
+    body { margin:0; background:#0d1117; color:#c9d1d9; font-family:Arial, sans-serif; text-align:center; }
+    h1 { margin:15px 0; font-size:28px; }
+    canvas { border:2px solid #30363d; background:#161b22; display:block; margin:0 auto 20px; border-radius:8px; }
+    #status { font-size:18px; margin:10px; padding:10px; background:#21262d; border-radius:6px; max-width:800px; margin:0 auto 20px; }
+    #menu { max-width:1000px; margin:20px auto; background:#161b22; padding:20px; border-radius:8px; border:1px solid #30363d; }
+    table { width:100%; border-collapse:collapse; margin-top:15px; }
+    th, td { padding:12px; border:1px solid #30363d; text-align:left; }
+    th { background:#21262d; font-weight:bold; }
+    .green { color:#56d364; font-weight:bold; background:rgba(86,212,100,0.1); }
+    .red { color:#f85149; font-weight:bold; background:rgba(248,81,73,0.1); }
+    .note { font-size:14px; color:#8b949e; margin-top:10px; }
+  </style>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <h1>Stick War Donate - Phe Xanh vs Phe Đỏ</h1>
+  <div id="status">Đang chờ kết nối LIVE...</div>
+  <canvas id="game" width="1200" height="600"></canvas>
+
+  <div id="menu">
+    <h2>Hướng dẫn Donate - Chọn phe bằng quà tặng</h2>
+    <p>Donate quà nào dưới đây để phe đó nhận quân/tướng. Giá xu (diamonds) bằng nhau giữa hai phe để công bằng!</p>
+    
+    <table>
+      <tr>
+        <th>Phe</th>
+        <th>Donate quà này để ủng hộ phe</th>
+        <th>Giá xu điển hình</th>
+        <th>Quân/Tướng nhận được</th>
+      </tr>
+      <tr class="green">
+        <td>Phe Xanh (A)</td>
+        <td>Rose, Finger Heart, Confetti, Fireworks, Popular Vote, Vote</td>
+        <td>1 xu</td>
+        <td>Lính thường (nhỏ, nhanh)</td>
+      </tr>
+      <tr class="red">
+        <td>Phe Đỏ (B)</td>
+        <td>Finger Heart (hoặc quà 1 xu khác), Ice Cream, Love Letter, Small Gift</td>
+        <td>1 xu</td>
+        <td>Lính thường (nhỏ, nhanh)</td>
+      </tr>
+      <tr class="green">
+        <td>Phe Xanh (A)</td>
+        <td>Microphone, Dancing Girl, Guitar, Camera</td>
+        <td>5–10 xu</td>
+        <td>Tướng trung (to hơn, mạnh hơn)</td>
+      </tr>
+      <tr class="red">
+        <td>Phe Đỏ (B)</td>
+        <td>Lucky Pig, Corgi, Small Lion, Teddy Bear</td>
+        <td>5–10 xu</td>
+        <td>Tướng trung (to hơn, mạnh hơn)</td>
+      </tr>
+      <tr class="green">
+        <td>Phe Xanh (A)</td>
+        <td>Lion, Panda, Universe, Giant Gift</td>
+        <td>20+ xu</td>
+        <td>Tướng elite (siêu to, siêu mạnh, có aura vàng)</td>
+      </tr>
+      <tr class="red">
+        <td>Phe Đỏ (B)</td>
+        <td>Giant Teddy Bear, Throne, Castle, Dragon</td>
+        <td>20+ xu</td>
+        <td>Tướng elite (siêu to, siêu mạnh, có aura vàng)</td>
+      </tr>
+      <tr>
+        <td colspan="4" class="note">
+          - Mọi cặp quà có **giá diamonds bằng nhau** → công bằng 100%.<br>
+          - Combo (x nhiều) → spawn nhiều quân cùng lúc.<br>
+          - Quà không nằm trong danh sách → mặc định Phe Xanh.
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <script>
+    const socket = io();
+
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+
+    const GROUND = canvas.height - 50;
+    const BASE_W = 140, BASE_H = 200;
+
+    let teamA = { troops: [], health: 1000, x: 80 };
+    let teamB = { troops: [], health: 1000, x: canvas.width - 80 - BASE_W };
+
+    class Soldier {
+      constructor(team, diamond) {
+        this.team = team;
+        this.x = team === 'A' ? teamA.x + BASE_W + 30 : teamB.x - 50;
+        this.y = GROUND - 20;
+        this.diamond = diamond;
+
+        if (diamond >= 21) {
+          this.type = 'elite';
+          this.size = 1.9;
+          this.hp = 25;
+          this.speed = team === 'A' ? 2.1 : -2.1;
+          this.damage = 5;
+          this.color = '#ffd700';
+        } else if (diamond >= 6) {
+          this.type = 'mid';
+          this.size = 1.4;
+          this.hp = 12;
+          this.speed = team === 'A' ? 1.7 : -1.7;
+          this.damage = 2.5;
+          this.color = '#aaffaa';
+        } else {
+          this.type = 'basic';
+          this.size = 1.0;
+          this.hp = 5;
+          this.speed = team === 'A' ? 1.3 : -1.3;
+          this.damage = 1;
+          this.color = team === 'A' ? '#56d364' : '#f85149';
+        }
+
+        this.frame = 0;
+      }
+
+      update() {
+        this.x += this.speed;
+        this.frame += 0.2;
+      }
+
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.scale(this.size, this.size);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 5 / this.size;
+
+        ctx.beginPath(); ctx.arc(0, -45, 18, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0,-27); ctx.lineTo(0,0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0,-15); ctx.lineTo(-25, -5); ctx.lineTo(-35, 15); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0,-15); ctx.lineTo(25, -5); ctx.stroke();
+        const angle = Math.sin(this.frame)*30;
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-15 + angle, 40); ctx.moveTo(0,0); ctx.lineTo(15 - angle, 40); ctx.stroke();
+
+        if (this.type === 'elite') {
+          ctx.beginPath();
+          ctx.arc(0, -20, 45, 0, Math.PI*2);
+          ctx.strokeStyle = 'rgba(255,215,0,0.5)';
+          ctx.lineWidth = 10;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+    }
+
+    function drawBase(team, darkColor) {
+      ctx.fillStyle = darkColor;
+      ctx.fillRect(team.x, GROUND - BASE_H, BASE_W, BASE_H);
+
+      const gradient = ctx.createLinearGradient(team.x, GROUND - BASE_H - 40, team.x + BASE_W, GROUND - BASE_H - 40);
+      gradient.addColorStop(0, '#56d364');
+      gradient.addColorStop(0.5, '#f0883e');
+      gradient.addColorStop(1, '#f85149');
+
+      ctx.fillStyle = gradient;
+      const hpPercent = team.health / 1000;  // Đổi thành 1000 máu
+      ctx.fillRect(team.x, GROUND - BASE_H - 50, BASE_W * hpPercent, 35);
+
+      ctx.strokeStyle = '#8b949e';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(team.x, GROUND - BASE_H - 50, BASE_W, 35);
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#0d1117';
+      ctx.fillRect(0, GROUND, canvas.width, canvas.height - GROUND);
+
+      drawBase(teamA, '#0f2e1a');
+      drawBase(teamB, '#2e0f0f');
+
+      [...teamA.troops, ...teamB.troops].forEach(s => { s.update(); s.draw(); });
+
+      for (let i = teamA.troops.length - 1; i >= 0; i--) {
+        const a = teamA.troops[i];
+        for (let j = teamB.troops.length - 1; j >= 0; j--) {
+          const b = teamB.troops[j];
+          if (Math.abs(a.x - b.x) < 50) {
+            a.hp -= b.damage;
+            b.hp -= a.damage;
+            if (a.hp <= 0) teamA.troops.splice(i, 1);
+            if (b.hp <= 0) teamB.troops.splice(j, 1);
+          }
+        }
+        if (a.x > teamB.x) {
+          teamB.health -= a.damage * 0.5;
+          teamA.troops.splice(i, 1);
+        }
+      }
+
+      for (let j = teamB.troops.length - 1; j >= 0; j--) {
+        const b = teamB.troops[j];
+        if (b.x < teamA.x + BASE_W) {
+          teamA.health -= b.damage * 0.5;
+          teamB.troops.splice(j, 1);
+        }
+      }
+
+      if (teamA.health <= 0) {
+        teamA.health = 1000;  // Reset về 1000 máu
+        teamA.troops = [];
+        status.innerText = 'Phe ĐỎ thắng! Reset...';
+        setTimeout(() => status.innerText = 'Chờ donate/bình luận từ LIVE...', 4000);
+      }
+      if (teamB.health <= 0) {
+        teamB.health = 1000;  // Reset về 1000 máu
+        teamB.troops = [];
+        status.innerText = 'Phe XANH thắng! Reset...';
+        setTimeout(() => status.innerText = 'Chờ donate/bình luận từ LIVE...', 4000);
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+
+    // Xử lý donate
+    socket.on('donate', data => {
+      const { giftName, repeat, diamond } = data;
+      let team = 'A';
+
+      const giftLower = giftName.toLowerCase();
+      if (giftLower.includes('love') || giftLower.includes('heart') || giftLower.includes('lucky') || giftLower.includes('pig') || giftLower.includes('lion') || giftLower.includes('panda') || giftLower.includes('universe') || giftLower.includes('corgi') || giftLower.includes('teddy')) {
+        team = 'B';
+      }
+
+      for (let i = 0; i < repeat; i++) {
+        const soldier = new Soldier(team, diamond);
+        if (team === 'A') teamA.troops.push(soldier);
+        else teamB.troops.push(soldier);
+      }
+
+      status.innerText = `Donate ${giftName} x${repeat} (${diamond} diamonds) → +${repeat} quân cho Phe ${team === 'A' ? 'XANH' : 'ĐỎ'}`;
+      setTimeout(() => status.innerText = 'Chờ donate/bình luận tiếp...', 5000);
+    });
+
+    // Xử lý bình luận "đỏ" / "xanh"
+    socket.on('comment_spawn', data => {
+      const team = data.team;
+      const soldier = new Soldier(team, 1);
+      if (team === 'A') teamA.troops.push(soldier);
+      else teamB.troops.push(soldier);
+
+      status.innerText = `Bình luận "${team === 'A' ? 'xanh' : 'đỏ'}" → +1 tướng cho Phe ${team === 'A' ? 'XANH' : 'ĐỎ'}`;
+      setTimeout(() => status.innerText = 'Chờ donate/bình luận tiếp...', 3000);
+    });
+
+    socket.on('status', msg => {
+      status.innerText = msg;
+    });
+
+    socket.on('connect', () => {
+      status.innerText = 'Đã kết nối server! Đang chờ LIVE...';
+    });
+  </script>
+</body>
+</html>
